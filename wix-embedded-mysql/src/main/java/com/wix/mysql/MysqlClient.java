@@ -7,11 +7,13 @@ import com.wix.mysql.exceptions.CommandFailedException;
 import de.flapdoodle.embed.process.distribution.Platform;
 import org.apache.commons.io.IOUtils;
 
-import java.io.IOException;
-import java.io.StringReader;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static com.wix.mysql.utils.Utils.isNullOrEmpty;
 import static de.flapdoodle.embed.process.distribution.Platform.Windows;
@@ -59,35 +61,60 @@ class MysqlClient {
         String command = (Platform.detect() == Windows) ? format("\"%s\"", sql) : sql;
         String out = "";
         try {
-            Process p = new ProcessBuilder(new String[]{
-                    Paths.get(executable.getBaseDir().getAbsolutePath(), "bin", "mysql").toString(),
-                    "--protocol=tcp",
-                    "--host=localhost",
-                    "--password=",
-                    format("--default-character-set=%s", effectiveCharset.getCharset()),
-                    format("--user=%s", SystemDefaults.USERNAME),
-                    format("--port=%s", config.getPort()),
-                    schemaName}).start();
-
-            // Process can fail due to missing shared library, thus attempt to input cmd will hide initial problem
-            if (!p.isAlive()) {
-                String err = IOUtils.toString(p.getErrorStream());
-                throw new CommandFailedException(command, schemaName, p.exitValue(), err);
+            ProcessBuilder processBuilder;
+            if (Platform.detect() == Windows) {
+                processBuilder = new ProcessBuilder(Paths.get(executable.getBaseDir().getAbsolutePath(), "bin", "mysql").toString(),
+                        "--protocol=tcp",
+                        "--host=localhost",
+                        "--password=",
+                        format("--default-character-set=%s", effectiveCharset.getCharset()),
+                        format("--user=%s", SystemDefaults.USERNAME),
+                        format("--port=%s", config.getPort()),
+                        schemaName);
+            } else {
+                processBuilder = new ProcessBuilder(Paths.get(executable.getBaseDir().getAbsolutePath(), "bin", "mysql").toString(),
+                        "--protocol=socket",
+                        "-S",
+                        config.getSockFile(),
+                        "--password=",
+                        format("--default-character-set=%s", effectiveCharset.getCharset()),
+                        format("--user=%s", SystemDefaults.USERNAME),
+                        format("--port=%s", config.getPort()),
+                        schemaName);
             }
 
-            IOUtils.copy(new StringReader(sql), p.getOutputStream(), java.nio.charset.Charset.defaultCharset());
-            p.getOutputStream().close();
+            File errorFile = File.createTempFile("mysql", "error");
+            File outputFile = File.createTempFile("mysql", "output");
+            File inputFile = File.createTempFile("mysql", "input");
+            inputFile.deleteOnExit();
+            outputFile.deleteOnExit();
+            errorFile.deleteOnExit();
 
-            out = IOUtils.toString(p.getInputStream());
+            try (FileOutputStream stream = new FileOutputStream(inputFile)) {
+                IOUtils.copy(new StringReader(sql), stream, StandardCharsets.UTF_8);
+                stream.flush();
+            }
+
+            processBuilder = processBuilder.redirectError(errorFile)
+                    .redirectOutput(outputFile)
+                    .redirectInput(inputFile);
+
+            Process p = processBuilder.start();
 
             if (p.waitFor() != 0) {
 
-                String err = IOUtils.toString(p.getErrorStream());
+                try (FileInputStream stream = new FileInputStream(errorFile)) {
+                    String err = IOUtils.toString(stream, StandardCharsets.UTF_8);
 
-                if (isNullOrEmpty(out))
-                    throw new CommandFailedException(command, schemaName, p.waitFor(), err);
-                else
-                    throw new CommandFailedException(command, schemaName, p.waitFor(), out);
+                    if (isNullOrEmpty(out))
+                        throw new CommandFailedException(command, schemaName, p.waitFor(), err);
+                    else
+                        throw new CommandFailedException(command, schemaName, p.waitFor(), out);
+                }
+            }
+
+            try (FileInputStream stream = new FileInputStream(outputFile)) {
+                out = IOUtils.toString(stream, StandardCharsets.UTF_8);
             }
 
         } catch (IOException | InterruptedException e) {

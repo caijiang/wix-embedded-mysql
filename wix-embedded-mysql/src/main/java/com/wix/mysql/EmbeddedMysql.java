@@ -13,6 +13,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiFunction;
+import java.util.function.Supplier;
 
 import static com.wix.mysql.config.DownloadConfig.aDownloadConfig;
 import static com.wix.mysql.config.MysqldConfig.SystemDefaults.SCHEMA;
@@ -29,12 +31,18 @@ public class EmbeddedMysql {
     private AtomicBoolean isRunning = new AtomicBoolean(true);
 
     protected EmbeddedMysql(
+            final BiFunction<MysqldConfig,DownloadConfig,IRuntimeConfig> runtimeConfigSupplier,
             final MysqldConfig mysqldConfig,
             final DownloadConfig downloadConfig) {
         logger.info("Preparing EmbeddedMysql version '{}'...", mysqldConfig.getVersion());
         this.config = mysqldConfig;
-        IRuntimeConfig runtimeConfig = new RuntimeConfigBuilder().defaults(mysqldConfig, downloadConfig).build();
-        MysqldStarter mysqldStarter = new MysqldStarter(runtimeConfig);
+        final MysqldStarter mysqldStarter;
+        if (runtimeConfigSupplier != null) {
+            mysqldStarter = new MysqldStarter(runtimeConfigSupplier.apply(mysqldConfig,downloadConfig));
+        } else {
+            IRuntimeConfig runtimeConfig = new RuntimeConfigBuilder().defaults(mysqldConfig, downloadConfig).build();
+            mysqldStarter = new MysqldStarter(runtimeConfig);
+        }
 
         localRepository.lock();
         try {
@@ -166,7 +174,10 @@ public class EmbeddedMysql {
         }
 
         public EmbeddedMysql start() {
-            EmbeddedMysql instance = new EmbeddedMysql(mysqldConfig, downloadConfig);
+            return start(null);
+        }
+        public EmbeddedMysql start(BiFunction<MysqldConfig,DownloadConfig,IRuntimeConfig> runtimeConfigSupplier) {
+            EmbeddedMysql instance = new EmbeddedMysql(runtimeConfigSupplier, mysqldConfig, downloadConfig);
 
             for (SchemaConfig schema : schemas) {
                 instance.addSchema(schema);

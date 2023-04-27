@@ -7,8 +7,10 @@ import de.flapdoodle.embed.process.distribution.IVersion;
 import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.TimeZone;
@@ -25,6 +27,7 @@ public class MysqldConfig extends ExecutableProcessConfig {
     private final Timeout timeout;
     private final List<ServerVariable> serverVariables;
     private final String tempDir;
+    private File sockFile;
 
     protected MysqldConfig(
             final IVersion version,
@@ -107,6 +110,32 @@ public class MysqldConfig extends ExecutableProcessConfig {
         return ToStringBuilder.reflectionToString(this);
     }
 
+    /**
+     * Helper for getting stable sock classPathFile. Saving to local instance variable on service start does not work due
+     * to the way flapdoodle process library works - it does all init in {@link de.flapdoodle.embed.process.runtime.AbstractProcess} and instance of
+     * {@link com.wix.mysql.MysqldProcess} is not yet present, so vars are not initialized.
+     * This algo gives stable sock classPathFile based on single executeCommands profile, but can leave trash sock classPathFiles in tmp dir.
+     * <p>
+     * Notes:
+     * .sock classPathFile needs to be in system temp dir and not in ex. target/...
+     * This is due to possible problems with existing mysql installation and apparmor profiles
+     * in linuxes.
+     */
+    public String generateSockFile() {
+        try {
+            sockFile = File.createTempFile("mysql", ".sock");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return getSockFile();
+    }
+
+    public String getSockFile(){
+        if (sockFile==null)
+            return null;
+        return sockFile.toString();
+    }
+
     public static class Builder {
         private IVersion version;
         private int port = 3310;
@@ -159,7 +188,7 @@ public class MysqldConfig extends ExecutableProcessConfig {
 
         /**
          * Provide mysql server option
-         *
+         * <p>
          * See <a href="mysqld-option-tables">http://dev.mysql.com/doc/refman/5.7/en/mysqld-option-tables.html</a>
          */
         public Builder withServerVariable(String name, boolean value) {
@@ -169,7 +198,7 @@ public class MysqldConfig extends ExecutableProcessConfig {
 
         /**
          * Provide mysql server int variable
-         *
+         * <p>
          * See <a href="mysqld-option-tables">http://dev.mysql.com/doc/refman/5.7/en/mysqld-option-tables.html</a>
          */
         public Builder withServerVariable(String name, int value) {
@@ -179,7 +208,7 @@ public class MysqldConfig extends ExecutableProcessConfig {
 
         /**
          * Provide mysql server string or enum variable
-         *
+         * <p>
          * See <a href="mysqld-option-tables">http://dev.mysql.com/doc/refman/5.7/en/mysqld-option-tables.html</a>
          */
         public Builder withServerVariable(String name, String value) {
