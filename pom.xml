@@ -187,14 +187,24 @@
 <!--        </snapshotRepository>-->
 <!--    </distributionManagement>-->
 
+<!--    <distributionManagement>-->
+<!--        <repository>-->
+<!--            <id>pinheng-release</id>-->
+<!--            <url>http://mvn.189pinheng.cn/repository/maven-releases/</url>-->
+<!--        </repository>-->
+<!--        <snapshotRepository>-->
+<!--            <id>pinheng-release</id>-->
+<!--            <url>http://mvn.189pinheng.cn/repository/maven-snapshots/</url>-->
+<!--        </snapshotRepository>-->
+<!--    </distributionManagement>-->
     <distributionManagement>
         <repository>
-            <id>pinheng-release</id>
-            <url>http://nexus.weitun.com.cn/repository/maven-releases/</url>
+            <id>rdc-releases-yx2YpJ</id>
+            <url>https://packages.aliyun.com/maven/repository/2442991-release-yx2YpJ/</url>
         </repository>
         <snapshotRepository>
-            <id>pinheng-release</id>
-            <url>http://nexus.weitun.com.cn/repository/maven-snapshots/</url>
+            <id>rdc-snapshots-yx2YpJ</id>
+            <url>https://packages.aliyun.com/maven/repository/2442991-snapshot-zrZDS5/</url>
         </snapshotRepository>
     </distributionManagement>
 
